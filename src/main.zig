@@ -67,7 +67,7 @@ pub fn main() !void {
     const file_info = try input_file.stat();
     const file_size = file_info.size;
 
-    var seed: u128 = 0xDEADBEEFCAFEBABE;
+    var seed: u128 = 0xDEADBEEFCAFEBABEEF;
     //encrypt
     if (mode == 1) {
 
@@ -78,7 +78,7 @@ pub fn main() !void {
         std.debug.print("Allocated buffer of size: {}\n", .{buffer_size});
         var input_buffer: [16]u8 align(16) = undefined;
         for (0..(file_size / 16)) |i| {
-            _ = (try input_file.read(input_buffer[0..16][i * 16 .. (i + 1) * 16]));
+            _ = (try input_file.read(input_buffer[0..16]));
             _ = Encrypt16Bytes(input_buffer[0..16].ptr, &seed, buffer[i * 32 ..].ptr);
         }
     } else if (mode == 2) {
@@ -86,7 +86,7 @@ pub fn main() !void {
         buffer = try allocator.alloc(u8, buffer_size);
         var input_buffer: [32]u8 align(16) = undefined;
         for (0..(file_size / 32)) |i| {
-            _ = (try input_file.read(input_buffer[0..32][i * 32 .. (i + 1) * 32]));
+            _ = (try input_file.read(input_buffer[0..32]));
             _ = Decrypt16Bytes(input_buffer[0..].ptr, &seed, buffer[i * 16 ..].ptr);
         }
     }
