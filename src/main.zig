@@ -1,12 +1,14 @@
-const std = @import("std");
+pub const std = @import("std");
 
-extern fn Encrypt16Bytes([*]u8, *u128, [*]u8) c_int;
-extern fn Decrypt16Bytes([*]u8, *u128, [*]u8) c_int;
+pub extern fn Encrypt16Bytes([*]align(16) const u8, *u128, [*]align(16) u8) c_int;
+pub extern fn Decrypt16Bytes([*]align(16) const u8, *u128, [*]align(16) u8) c_int;
 
+const expect = std.testing.expect;
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
     var input_file_path: []const u8 = "";
     var output_file_path: []const u8 = "output.enc";
+    var seed: u128 = 0xDEADBEEFCAFEBABEEF;
     var args_it = try std.process.argsWithAllocator(allocator);
     var mode: u8 = 0;
     defer args_it.deinit();
@@ -34,8 +36,21 @@ pub fn main() !void {
             mode = 1;
         } else if (std.mem.eql(u8, arg, "-d")) {
             mode = 2;
+        } else if (std.mem.eql(u8, arg, "-k")) {
+            if (args_it.next()) |input_arg| {
+                seed = try std.fmt.parseInt(u128, input_arg, 16);
+            } else {
+                return error.InvalidInput;
+            }
         } else if (std.mem.eql(u8, arg, "-h")) {
-            std.debug.print("-e to Encrypt\n-d to Decrypt\n-i to open a file\n-o to Specify the output file, the default is output.enc\n-h to display this menu\n", .{});
+            std.debug.print(
+                \\-e to Encrypt
+                \\-d to Decrypt
+                \\-k [hex_string] 16 byte key in hex, the default is 0xDEADBEEFCAFEBABEEF
+                \\-i [filepath] to open a file
+                \\-o [filepath] to Specify the output file, the default is output.enc
+                \\-h to display this menu
+            , .{});
             return;
         } else {
             std.debug.print("Unknown argument: {s}\n", .{arg});
@@ -43,7 +58,14 @@ pub fn main() !void {
         }
     }
     if (arg_presence == false) {
-        std.debug.print("-e to Encrypt\n-d to Decrypt\n-i to open a file\n-o to Specify the output file, the default is output.enc\n-h to display this menu\n", .{});
+        std.debug.print(
+            \\-e to Encrypt
+            \\-d to Decrypt
+            \\-k [hex_string] 16 byte key in hex, the default is 0xDEADBEEFCAFEBABEEF
+            \\-i [filepath] to open a file
+            \\-o [filepath] to Specify the output file, the default is output.enc
+            \\-h to display this menu
+        , .{});
         return;
     }
     if (mode == 0) {
@@ -59,7 +81,7 @@ pub fn main() !void {
     defer input_file.close();
     const output_file = try std.fs.cwd().createFile(output_file_path, .{});
     defer output_file.close();
-    var buffer: []u8 = undefined;
+    var buffer: []align(16) u8 = undefined;
     var buffer_size: usize = undefined;
     defer allocator.free(buffer);
 
@@ -67,27 +89,38 @@ pub fn main() !void {
     const file_info = try input_file.stat();
     const file_size = file_info.size;
 
-    var seed: u128 = 0xDEADBEEFCAFEBABEEF;
     //encrypt
     if (mode == 1) {
 
         // Allocate a buffer twice the size of the file
-        buffer_size = file_size * 2;
-        buffer = try allocator.alloc(u8, buffer_size);
+        const padding_len: usize = file_size % 16;
+
+        if (padding_len > 0) {
+            buffer_size = (file_size - padding_len + 16) * 2;
+        } else {
+            buffer_size = file_size * 2;
+        }
+        buffer = @as([]align(16) u8, @alignCast(try allocator.alloc(u8, buffer_size)));
 
         std.debug.print("Allocated buffer of size: {}\n", .{buffer_size});
         var input_buffer: [16]u8 align(16) = undefined;
         for (0..(file_size / 16)) |i| {
             _ = (try input_file.read(input_buffer[0..16]));
-            _ = Encrypt16Bytes(input_buffer[0..16].ptr, &seed, buffer[i * 32 ..].ptr);
+            _ = Encrypt16Bytes(input_buffer[0..16].ptr, &seed, @as([*]align(16) u8, @alignCast(buffer[i * 32 ..].ptr)));
         }
+        if (padding_len > 0) {
+            @memset(input_buffer[0..16], 0);
+            _ = (try input_file.read(input_buffer[0..16]));
+            _ = Encrypt16Bytes(input_buffer[0..16].ptr, &seed, @as([*]align(16) u8, @alignCast(buffer[buffer_size - 32 ..].ptr)));
+        }
+        // decrypt
     } else if (mode == 2) {
         buffer_size = file_size / 2;
-        buffer = try allocator.alloc(u8, buffer_size);
+        buffer = @as([]align(16) u8, @alignCast(try allocator.alloc(u8, buffer_size)));
         var input_buffer: [32]u8 align(16) = undefined;
         for (0..(file_size / 32)) |i| {
             _ = (try input_file.read(input_buffer[0..32]));
-            _ = Decrypt16Bytes(input_buffer[0..].ptr, &seed, buffer[i * 16 ..].ptr);
+            _ = Decrypt16Bytes(input_buffer[0..].ptr, &seed, @as([*]align(16) u8, @alignCast(buffer[i * 16 ..].ptr)));
         }
     }
     _ = try output_file.write(buffer[0..buffer_size]);
@@ -95,4 +128,33 @@ pub fn main() !void {
     return;
 }
 
-//test "simple test" {}
+test "asm_modules" {
+    std.debug.print("Asm modules test\n", .{});
+
+    const input_buffer: [16]u8 align(16) = [_]u8{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf };
+    const expected_output: [32]u8 = [_]u8{
+        0xF0, 0x00, 0x7E, 0x04, // Bytes 0 - 3
+        0xE7, 0x00, 0xBC, 0x01, // Bytes 4 - 7
+        0x2E, 0x01, 0xDB, 0x01, // Bytes 8 - 11
+        0x9F, 0x00, 0xE2, 0x03, // Bytes 12 - 15
+        0x37, 0x00, 0xB4, 0x00, // Bytes 16 - 19
+        0xFF, 0x00, 0x75, 0x00, // Bytes 20 - 23
+        0x01, 0x00, 0x47, 0x00, // Bytes 24 - 27
+        0xCF, 0x01, 0x36, 0x01, // Bytes 28 - 31
+    };
+    var output_buffer: [32]u8 align(16) = undefined;
+    var decrypt_buffer: [16]u8 align(16) = undefined;
+    var seed: u128 = 0xDEADBEEF;
+
+    std.debug.print("Test Encrypt\n", .{});
+    try expect(Encrypt16Bytes(input_buffer[0..].ptr, &seed, output_buffer[0..].ptr) == 0);
+
+    std.debug.print("Test Encrypt values\n", .{});
+    try expect(std.mem.eql(u8, output_buffer[0..32], expected_output[0..32]));
+
+    std.debug.print("Test Decrypt\n", .{});
+    try expect(Decrypt16Bytes(output_buffer[0..].ptr, &seed, decrypt_buffer[0..].ptr) == 0);
+    std.debug.print("Test Decrypt values\n", .{});
+    try expect(std.mem.eql(u8, input_buffer[0..16], decrypt_buffer[0..16]));
+    std.debug.print("Test Success\n", .{});
+}
