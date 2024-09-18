@@ -30,7 +30,9 @@ BES encrypts data by iteratively generating outputs with the help of `aesenc` in
      - If the first byte of the PRNG output matches the plaintext byte, record the counter value as part of the ciphertext.
      - Update the seed with the latest PRNG output.
    - The ciphertext is a sequence of counters representing the number of iterations for each byte.
-*Note: if the required byte is not present after 65535 iterations, everything goes up in flames, since it is obviously the user's fault for picking a faulty key. However the probabiliy of that is like 10^-112*
+
+*Note: if the required byte is not found after 65535 iterations, everything goes up in flames, since it is obviously the user's fault for picking a faulty key. However the probabiliy of that is like 10^-112*
+
 2. **Decryption:**
    - For each counter in the ciphertext:
      - Use the initial seed to generate PRNG outputs.
