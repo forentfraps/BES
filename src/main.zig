@@ -8,7 +8,7 @@ pub fn main() !void {
     const allocator = std.heap.page_allocator;
     var input_file_path: []const u8 = "";
     var output_file_path: []const u8 = "output.enc";
-    var seed: u128 = 0xDEADBEEFCAFEBABEEF;
+    var seed: u128 = 0xDEADBEEFCAFEBABE;
     var args_it = try std.process.argsWithAllocator(allocator);
     var mode: u8 = 0;
     defer args_it.deinit();
@@ -33,9 +33,17 @@ pub fn main() !void {
                 return error.InvalidOutput;
             }
         } else if (std.mem.eql(u8, arg, "-e")) {
-            mode = 1;
+            if (mode != 0) {
+                mode = 3;
+            } else {
+                mode = 1;
+            }
         } else if (std.mem.eql(u8, arg, "-d")) {
-            mode = 2;
+            if (mode != 0) {
+                mode = 3;
+            } else {
+                mode = 2;
+            }
         } else if (std.mem.eql(u8, arg, "-k")) {
             if (args_it.next()) |input_arg| {
                 seed = try std.fmt.parseInt(u128, input_arg, 16);
@@ -46,7 +54,7 @@ pub fn main() !void {
             std.debug.print(
                 \\-e to Encrypt
                 \\-d to Decrypt
-                \\-k [hex_string] 16 byte key in hex, the default is 0xDEADBEEFCAFEBABEEF
+                \\-k [hex_string] 16 byte key in hex, the default is 0xDEADBEEFCAFEBABE
                 \\-i [filepath] to open a file
                 \\-o [filepath] to Specify the output file, the default is output.enc
                 \\-h to display this menu
@@ -61,14 +69,14 @@ pub fn main() !void {
         std.debug.print(
             \\-e to Encrypt
             \\-d to Decrypt
-            \\-k [hex_string] 16 byte key in hex, the default is 0xDEADBEEFCAFEBABEEF
+            \\-k [hex_string] 16 byte key in hex, the default is 0xDEADBEEFCAFEBABE
             \\-i [filepath] to open a file
             \\-o [filepath] to Specify the output file, the default is output.enc
             \\-h to display this menu
         , .{});
         return;
     }
-    if (mode == 0) {
+    if (mode == 0 or mode == 3) {
         std.debug.print("Please specify -e or -d for either encryption or decryption\n", .{});
         return;
     }
@@ -102,7 +110,6 @@ pub fn main() !void {
         }
         buffer = @as([]align(16) u8, @alignCast(try allocator.alloc(u8, buffer_size)));
 
-        std.debug.print("Allocated buffer of size: {}\n", .{buffer_size});
         var input_buffer: [16]u8 align(16) = undefined;
         for (0..(file_size / 16)) |i| {
             _ = (try input_file.read(input_buffer[0..16]));
