@@ -53,8 +53,8 @@ BES can be built on both **Linux** and **Windows** systems.
 1. **Clone the Repository:**
 
    ```
-   git clone https://github.com/yourusername/BogusEncryptionStandard.git
-   cd BogusEncryptionStandard
+   git clone https://github.com/forentfraps/BES.git
+   cd BES
    ```
 2. **Build it**
    ```
