@@ -42,7 +42,7 @@ BES encrypts data by iteratively generating outputs with the help of `aesenc` in
 
 ### Prerequisites
 
-- **Zig Programming Language** (version 0.9.0 or later)
+- **Zig Programming Language** (version 0.13.0 or later)
 - **NASM** assembler (for assembling the ASM code)
 - **x86-64 CPU** with support for AES-NI and AVX instructions
 
@@ -57,14 +57,14 @@ BES can be built on both **Linux** and **Windows** systems.
    cd BogusEncryptionStandard
    ```
 2. **Build it**
-  ```
+   ```
    zig build
    ```
 
 ## Usage
 
 ### Command-Line Options
-```less
+```
 
 -e                 Encrypt mode
 -d                 Decrypt mode
